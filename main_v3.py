@@ -44,10 +44,10 @@ async def get_page_data(session, homework, page):
                 try:
                     score = 0
                     score_block = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[5].find_all('div')
-                    score_block[0] = re.search("\d+", str(score_block[0].get_text()))[0]
-                    score_block[1] = re.search("\d+", str(score_block[1].get_text()))[0]
+                    score_block[0] = int(re.search("\d+", str(score_block[0].get_text()))[0])
+                    score_block[1] = int(re.search("\d+", str(score_block[1].get_text()))[0])
                     if score_block[0] != score_block[1]:
-                        score = score_block[0] + score_block[1]
+                        score = max(score_block[0] + score_block[1])
                     else:
                         score = score_block[0]
                 except:
@@ -138,7 +138,7 @@ async def gather_data():
             pages = len(
                 homework_soup.find('div', id="example2_paginate").find_all("li", class_="paginate_button page-item"))
             expected = homework_soup.find('div', id="example2_info").text
-            print("\nFound ", expected[47:49], " tokens")
+            print("\nFound ", re.search(r'\d*$', expected.strip()).group(), " tokens")
         except:
             pages = 0
             print("\nLess than 15 tokens expected")
@@ -191,6 +191,7 @@ def data_processing():
 
     return data
 
+
 def output_in_csv(data):
     cur_time = datetime.datetime.now().strftime("%d_%m_%Y_%H_%M")
 
@@ -209,6 +210,39 @@ def output_in_csv(data):
                 "Ссылка на сложный уровень"
             )
         )
+
+    config = ConfigParser()
+    config.read('config.ini')
+    print(config['email']['filling_in_the_template'])
+
+    if(config.getboolean('email','filling_in_the_template') == True):
+        count = int(config['email']['count'])
+
+        users_pattern = []
+        for i in range(1, count + 1):
+            users_pattern.append(config['email'][f'item{i}'])
+
+        current_data = []
+
+        for user in users_pattern:
+            for item in data:
+                if item["user_email"] == user:
+                    current_data.append(item)
+                    break
+            else:
+                current_data.append( dict(
+                    {
+                        "user_email": user,
+                        "user_name": '',
+                        "score_easy": '0',
+                        "score_middle": '0',
+                        "score_hard": '0',
+                        "href_easy": '',
+                        "href_middle": '',
+                        "href_hard": '',
+                    }))
+        data = current_data
+
 
     for user in data:
         with open(f"{FNAME}--{cur_time}.csv", "a", newline="") as file:
