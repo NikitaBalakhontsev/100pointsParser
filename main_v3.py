@@ -8,7 +8,7 @@ import datetime
 # pip install datetime aiohttp asyncio bs4 configparser csv re lxml
 
 
-
+CONFIG_NAME = "config.ini"
 homeworks_data = []
 FNAME = ""
 LIMIT = 4 #limit of simultaneous processes
@@ -77,7 +77,7 @@ async def gather_data():
     }
 
     config = ConfigParser()
-    config.read('config.ini')
+    config.read(CONFIG_NAME)
     login_data = {
         'email':  config['main']['email'],
         'password': config['main']['password'],
@@ -135,13 +135,13 @@ async def gather_data():
         # end of choose lesson
 
         try:
-            pages = len(
-                homework_soup.find('div', id="example2_paginate").find_all("li", class_="paginate_button page-item"))
-            expected = homework_soup.find('div', id="example2_info").text
-            print("\nFound ", re.search(r'\d*$', expected.strip()).group(), " tokens")
+            expected_block = homework_soup.find('div', id="example2_info").text
+            expected = int(re.search(r'\d*$', expected_block.strip()).group())
+            pages = expected // 15
+            print("\nНайдено ", expected, " записи")
         except:
             pages = 0
-            print("\nLess than 15 tokens expected")
+            print("\nНайдено меньше 15 записей")
 
 
         limit = asyncio.Semaphore(LIMIT)
@@ -188,7 +188,6 @@ def data_processing():
             if int(homework["score"]) > int(data[-1]["score_hard"]):
                 data[-1]["score_hard"] = homework["score"]
                 data[-1]["href_hard"] = homework["href"]
-
     return data
 
 
@@ -212,8 +211,8 @@ def output_in_csv(data):
         )
 
     config = ConfigParser()
-    config.read('config.ini')
-    print(config['email']['filling_in_the_template'])
+    config.read(CONFIG_NAME)
+
 
     if(config.getboolean('email','filling_in_the_template') == True):
         count = int(config['email']['count'])
@@ -242,7 +241,6 @@ def output_in_csv(data):
                         "href_hard": '',
                     }))
         data = current_data
-
 
     for user in data:
         with open(f"{FNAME}--{cur_time}.csv", "a", newline="") as file:
