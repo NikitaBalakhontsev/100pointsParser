@@ -8,7 +8,7 @@ import datetime
 # pip install datetime aiohttp asyncio bs4 configparser csv re lxml
 
 
-CONFIG_NAME = "config.ini"
+CONFIG_NAME = "main_config.ini"
 homeworks_data = []
 FNAME = ""
 LIMIT = 4 #limit of simultaneous processes
@@ -40,19 +40,14 @@ async def get_page_data(session, homework, page):
             async with session.get(href + "?status=checking", headers=headers) as user_page_response:
                 user_page_response_text = await user_page_response.text()
                 user_page_soup = BeautifulSoup(user_page_response_text, 'lxml')
-
                 try:
-                    score = 0
                     score_block = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[5].find_all('div')
-                    score_block[0] = int(re.search("\d+", str(score_block[0].get_text()))[0])
-                    score_block[1] = int(re.search("\d+", str(score_block[1].get_text()))[0])
-                    if score_block[0] != score_block[1]:
-                        score = max(score_block[0] + score_block[1])
-                    else:
-                        score = score_block[0]
+                    #test_score = int(re.search("\d+", str(score_block[0].get_text()))[0])
+                    curators_score = int(re.search("\d+", str(score_block[1].get_text()))[0])
+                    score = curators_score
                 except:
-                    score_block = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[5].find('div').text
-                    match = re.search("\d+", str(score_block))
+                    simple_score_block = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[5].find('div').text
+                    match = re.search("\d+", str(simple_score_block))
                     score = match[0] if match else 'Not found'
 
             homeworks_data.append(
@@ -158,6 +153,8 @@ def data_processing():
     data = []
 
     homeworks_data_sort = sorted(homeworks_data, key=lambda d: d['user_email'])
+
+    print(*homeworks_data_sort, sep = '\n')
 
     for homework in homeworks_data_sort:
         if not (data) or data[-1]["user_email"] != homework["user_email"]:
