@@ -5,10 +5,10 @@ from bs4 import BeautifulSoup
 import asyncio
 import aiohttp
 import datetime
-# pip install datetime aiohttp asyncio bs4 configparser csv re lxml
+# pip install datetime aiohttp asyncio beautifulsoup4 configparser csv re lxml
 
 
-CONFIG_NAME = "main_config.ini"
+CONFIG_NAME = "config.ini"
 homeworks_data = []
 FNAME = ""
 LIMIT = 4 #limit of simultaneous processes
@@ -71,14 +71,18 @@ async def gather_data():
                       'Chrome/104.0.5112.102 Safari/537.36 OPR/90.0.4480.84 (Edition Yx 08) '
     }
 
-    config = ConfigParser()
-    config.read(CONFIG_NAME)
-    login_data = {
-        'email':  config['main']['email'],
-        'password': config['main']['password'],
-    }
+    try:
+        config = ConfigParser()
+        config.read(CONFIG_NAME)
+        login_data = {
+            'email':  config['main']['email'],
+            'password': config['main']['password'],
+        }
 
-    course_id = config['main']['course_id']
+        course_id = config['main']['course_id']
+    except:
+        print("The configuration file could not be opened")
+        exit(1)
 
     async with aiohttp.ClientSession() as session:
         response = await session.post(link, data=login_data, headers=headers)
@@ -207,7 +211,7 @@ def output_in_csv(data):
             )
         )
 
-    config = ConfigParser()
+    config = ConfigParser()   
     config.read(CONFIG_NAME)
 
 
