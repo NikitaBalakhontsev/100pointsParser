@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import asyncio
 import aiohttp
 import datetime
+from time import sleep
 # pip install datetime aiohttp asyncio beautifulsoup4 configparser csv re lxml
 
 
@@ -33,7 +34,7 @@ async def get_page_data(session, homework, page):
 
         for user in users:
             href = user.find('a', class_="btn btn-xs bg-purple", href=True)['href']
-            lavel = user.find_all('div')[7].find('b').text
+            level = user.find_all('div')[7].find('b').text
             user_name = user.find_all('div')[2].text
             user_email = user.find_all('div')[3].text
 
@@ -54,7 +55,7 @@ async def get_page_data(session, homework, page):
                 {
                     "user_email": user_email,
                     "user_name": user_name,
-                    "lavel": lavel,
+                    "level": level,
                     "score": score,
                     "href": href + "?status=checked",
                 }
@@ -84,6 +85,7 @@ async def gather_data():
         print("The configuration file could not be opened")
         exit(1)
 
+
     async with aiohttp.ClientSession() as session:
         response = await session.post(link, data=login_data, headers=headers)
         soup = BeautifulSoup(await response.text(), "lxml")
@@ -95,14 +97,28 @@ async def gather_data():
             print("\nAuthorization error")
             exit(1)
 
-        page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}"
-        page_response = await session.get(page, headers=headers)
-        page_soup = BeautifulSoup(await page_response.text(), "lxml")
 
-        module_select = page_soup.find("div", {"class": "form-group", "id": "module_select"}).find_all('option')
-        module_select = [str(module)[14:-9:].split("\"") for module in module_select][1:]
+        module_selection = None
+        for x in range(0, 5):
+            try:
+                page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}"
+                page_response = await session.get(page, headers=headers)
+                page_soup = BeautifulSoup(await page_response.text(), "lxml")
+                module_selection = page_soup.find("div", {"class": "form-group", "id": "module_select"}).find_all('option')
+                connection_error = None
+            except Exception as connection_error:
+                pass
+
+            if connection_error:
+                sleep(0.5)
+            else:
+                break
+        if module_selection:
+            raise ConnectionError("Module_selection error")
+
+        module_selection = [str(module)[14:-9:].split("\"") for module in module_selection][1:]
         module_sorted = []
-        for module in module_select:
+        for module in module_selection:
             module_sorted.append([int(module[1]), module[2][1:]])
         module_sorted.sort()
         for module in module_sorted:
@@ -110,11 +126,24 @@ async def gather_data():
         module_id = input("\nВведите id модуля (первое число): ")
         print()
 
-        page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}&module_id={module_id}"
-        page_response = await session.get(page, headers=headers)
-        page_soup = BeautifulSoup(await page_response.text(), 'lxml')
+        lesson_select = None
+        for x in range(0, 5):
+            try:
+                page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}&module_id={module_id}"
+                page_response = await session.get(page, headers=headers)
+                page_soup = BeautifulSoup(await page_response.text(), 'lxml')
+                lesson_select = page_soup.find("div", {"class": "form-group", "id": "lesson_select"}).find_all('option')
+                connection_error = None
+            except Exception as connection_error:
+                pass
 
-        lesson_select = page_soup.find("div", {"class": "form-group", "id": "lesson_select"}).find_all('option')
+            if connection_error:
+                sleep(0.5)
+            else:
+                break
+        if lesson_select :
+            raise ConnectionError("Module_selection error")
+
         lesson_select = [str(lesson)[14:-9:].split("\"") for lesson in lesson_select][1:]
         lesson_sorted = []
         for lesson in lesson_select:
@@ -175,17 +204,17 @@ def data_processing():
                 }
             )
 
-        if homework["lavel"] == "Базовый уровень":
+        if homework["level"] == "Базовый уровень":
             if int(homework["score"]) > int(data[-1]["score_easy"]):
                 data[-1]["score_easy"] = homework["score"]
                 data[-1]["href_easy"] = homework["href"]
 
-        elif homework["lavel"] == "Средний уровень":
+        elif homework["level"] == "Средний уровень":
             if int(homework["score"]) > int(data[-1]["score_middle"]):
                 data[-1]["score_middle"] = homework["score"]
                 data[-1]["href_middle"] = homework["href"]
 
-        elif homework["lavel"] == "Сложный уровень":
+        elif homework["level"] == "Сложный уровень":
             if int(homework["score"]) > int(data[-1]["score_hard"]):
                 data[-1]["score_hard"] = homework["score"]
                 data[-1]["href_hard"] = homework["href"]
@@ -214,7 +243,7 @@ def output_in_csv(data):
     config = ConfigParser()   
     config.read(CONFIG_NAME)
 
-
+    print(config.getboolean('email','filling_in_the_template'))
     if(config.getboolean('email','filling_in_the_template') == True):
         count = int(config['email']['count'])
 
@@ -243,21 +272,37 @@ def output_in_csv(data):
                     }))
         data = current_data
 
+    print(len(data))
+    print()
     for user in data:
         with open(f"{FNAME}--{cur_time}.csv", "a", newline="") as file:
             writer = csv.writer(file, delimiter=";")
-            writer.writerow(
-                (
-                    user["user_email"],
-                    user["user_name"],
-                    user["score_easy"],
-                    user["score_middle"],
-                    user["score_hard"],
-                    user["href_easy"],
-                    user["href_middle"],
-                    user["href_hard"]
+            try:
+                writer.writerow(
+                    (
+                        user["user_email"],
+                        user["user_name"],
+                        user["score_easy"],
+                        user["score_middle"],
+                        user["score_hard"],
+                        user["href_easy"],
+                        user["href_middle"],
+                        user["href_hard"]
+                    )
                 )
-            )
+            except:
+                writer.writerow(
+                    (
+                        user["user_email"],
+                        "Иероглифы",
+                        user["score_easy"],
+                        user["score_middle"],
+                        user["score_hard"],
+                        user["href_easy"],
+                        user["href_middle"],
+                        user["href_hard"]
+                    )
+                )
     print("Saved file  " + f"{FNAME}--{cur_time}.csv")
 
 
