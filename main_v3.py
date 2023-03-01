@@ -1,16 +1,21 @@
-import re
-import csv
-from configparser import ConfigParser
-from bs4 import BeautifulSoup
 import asyncio
-import aiohttp
+import csv
 import datetime
+import re
+from configparser import ConfigParser
 from time import sleep
+
+import aiohttp
+from bs4 import BeautifulSoup
+
 # pip install datetime aiohttp asyncio beautifulsoup4 configparser csv re lxml
 
 
 CONFIG_NAME = "config.ini"
-homeworks_data = []
+
+
+
+HOMEWORKS_DATA = []
 FNAME = ""
 LIMIT = 4 #limit of simultaneous processes
 
@@ -51,7 +56,7 @@ async def get_page_data(session, homework, page):
                     match = re.search("\d+", str(simple_score_block))
                     score = match[0] if match else 'Not found'
 
-            homeworks_data.append(
+            HOMEWORKS_DATA.append(
                 {
                     "user_email": user_email,
                     "user_name": user_name,
@@ -98,13 +103,14 @@ async def gather_data():
             exit(1)
 
 
+
         module_selection = None
         for x in range(0, 5):
             try:
                 page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}"
                 page_response = await session.get(page, headers=headers)
                 page_soup = BeautifulSoup(await page_response.text(), "lxml")
-                module_selection = page_soup.find("div", {"class": "form-group", "id": "module_select"}).find_all('option')
+                module_selection = page_soup.find("select", {"class": "form-control", "id": "module_id"}).find_all('option')
                 connection_error = None
             except Exception as connection_error:
                 pass
@@ -113,7 +119,7 @@ async def gather_data():
                 sleep(0.5)
             else:
                 break
-        if module_selection:
+        if not module_selection:
             raise ConnectionError("Module_selection error")
 
         module_selection = [str(module)[14:-9:].split("\"") for module in module_selection][1:]
@@ -126,13 +132,15 @@ async def gather_data():
         module_id = input("\nВведите id модуля (первое число): ")
         print()
 
+
+
         lesson_select = None
         for x in range(0, 5):
             try:
                 page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}&module_id={module_id}"
                 page_response = await session.get(page, headers=headers)
                 page_soup = BeautifulSoup(await page_response.text(), 'lxml')
-                lesson_select = page_soup.find("div", {"class": "form-group", "id": "lesson_select"}).find_all('option')
+                lesson_select = page_soup.find("select", {"class": "form-control", "id": "lesson_id"}).find_all('option')
                 connection_error = None
             except Exception as connection_error:
                 pass
@@ -141,8 +149,9 @@ async def gather_data():
                 sleep(0.5)
             else:
                 break
-        if lesson_select :
-            raise ConnectionError("Module_selection error")
+        if not lesson_select :
+            raise ConnectionError("Lesson_selection error")
+
 
         lesson_select = [str(lesson)[14:-9:].split("\"") for lesson in lesson_select][1:]
         lesson_sorted = []
@@ -185,7 +194,7 @@ async def gather_data():
 def data_processing():
     data = []
 
-    homeworks_data_sort = sorted(homeworks_data, key=lambda d: d['user_email'])
+    homeworks_data_sort = sorted(HOMEWORKS_DATA, key=lambda d: d['user_email'])
 
     print(*homeworks_data_sort, sep = '\n')
 
@@ -239,41 +248,42 @@ def output_in_csv(data):
                 "Ссылка на сложный уровень"
             )
         )
+    try:
+        config = ConfigParser()
+        config.read(CONFIG_NAME)
 
-    config = ConfigParser()   
-    config.read(CONFIG_NAME)
+        if(config.getboolean('email','filling_in_the_template') == True):
+            count = int(config['email']['count'])
 
-    print(config.getboolean('email','filling_in_the_template'))
-    if(config.getboolean('email','filling_in_the_template') == True):
-        count = int(config['email']['count'])
+            users_pattern = []
+            for i in range(1, count + 1):
+                users_pattern.append(config['email'][f'item{i}'])
 
-        users_pattern = []
-        for i in range(1, count + 1):
-            users_pattern.append(config['email'][f'item{i}'])
+            current_data = []
 
-        current_data = []
+            for user in users_pattern:
+                for item in data:
+                    if item["user_email"] == user:
+                        current_data.append(item)
+                        break
+                else:
+                    current_data.append( dict(
+                        {
+                            "user_email": user,
+                            "user_name": '',
+                            "score_easy": '0',
+                            "score_middle": '0',
+                            "score_hard": '0',
+                            "href_easy": '',
+                            "href_middle": '',
+                            "href_hard": '',
+                        }))
+            data = current_data
+    except Exception:
+        pass
 
-        for user in users_pattern:
-            for item in data:
-                if item["user_email"] == user:
-                    current_data.append(item)
-                    break
-            else:
-                current_data.append( dict(
-                    {
-                        "user_email": user,
-                        "user_name": '',
-                        "score_easy": '0',
-                        "score_middle": '0',
-                        "score_hard": '0',
-                        "href_easy": '',
-                        "href_middle": '',
-                        "href_hard": '',
-                    }))
-        data = current_data
 
-    print(len(data))
-    print()
+
     for user in data:
         with open(f"{FNAME}--{cur_time}.csv", "a", newline="") as file:
             writer = csv.writer(file, delimiter=";")
