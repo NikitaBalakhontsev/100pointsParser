@@ -4,7 +4,6 @@ import datetime
 import re
 from configparser import ConfigParser
 import time
-
 import aiohttp
 from bs4 import BeautifulSoup
 
@@ -13,7 +12,7 @@ from bs4 import BeautifulSoup
 
 
 LIMIT = 10 #limit the number of pages to be requestede at the same time
-CONFIG_NAME = "config.ini"
+CONFIG_NAME = "sotnik_config.ini"
 
 
 HOMEWORKS_DATA = []
