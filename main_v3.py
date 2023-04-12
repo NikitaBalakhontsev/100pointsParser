@@ -4,17 +4,14 @@ import datetime
 import re
 from configparser import ConfigParser
 import time
-
 import aiohttp
 from bs4 import BeautifulSoup
 
 # pip install datetime aiohttp asyncio beautifulsoup4 configparser csv re lxml
  
 
-
 LIMIT = 10 #limit the number of pages to be requestede at the same time
 CONFIG_NAME = "config.ini"
-
 
 HOMEWORKS_DATA = []
 FNAME = ""
@@ -60,7 +57,6 @@ async def get_page_data(session, homework, page, semaphore):
 
                     try:
                         curator_data = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[3].find_all('div')[1].find_all('b')
-                        print(curator_data)
                         duty_curator = curator_data[0].text
                         curator = curator_data[1].text
                     except:
