@@ -3,71 +3,84 @@ import csv
 import datetime
 import re
 from configparser import ConfigParser
-from time import sleep
+import time
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 # pip install datetime aiohttp asyncio beautifulsoup4 configparser csv re lxml
+ 
 
 
+LIMIT = 10 #limit the number of pages to be requestede at the same time
 CONFIG_NAME = "config.ini"
-
 
 
 HOMEWORKS_DATA = []
 FNAME = ""
-LIMIT = 4 #limit of simultaneous processes
 
 
-async def get_page_data(session, homework, page):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
-                      'Chrome/104.0.5112.102 Safari/537.36 OPR/90.0.4480.84 (Edition Yx 08) '
-    }
 
-    page_link = homework + "&page=" + str(page)
-    async with session.get(page_link, headers=headers) as table_response:
+async def get_page_data(session, homework, page, semaphore):
+    async with semaphore:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                          'Chrome/104.0.5112.102 Safari/537.36 OPR/90.0.4480.84 (Edition Yx 08) '
+        }
 
-        table_response_text = await table_response.text()
-        table_soup = BeautifulSoup(table_response_text, 'lxml')
+        page_link = homework + "&page=" + str(page)
+        async with session.get(page_link, headers=headers) as table_response:
 
-        users = table_soup.find('table', id="example2").find_all('tr', class_="odd")
+            table_response_text = await table_response.text()
+            table_soup = BeautifulSoup(table_response_text, 'lxml')
 
-        if len(users) == 0:
-            print("No homework found")
+            users = table_soup.find('table', id="example2").find_all('tr', class_="odd")
 
-        for user in users:
-            href = user.find('a', class_="btn btn-xs bg-purple", href=True)['href']
-            level = user.find_all('div')[7].find('b').text
-            user_name = user.find_all('div')[2].text
-            user_email = user.find_all('div')[3].text
+            if len(users) == 0:
+                print("No homework found")
 
-            async with session.get(href + "?status=checking", headers=headers) as user_page_response:
-                user_page_response_text = await user_page_response.text()
-                user_page_soup = BeautifulSoup(user_page_response_text, 'lxml')
-                try:
-                    score_block = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[5].find_all('div')
-                    #test_score = int(re.search("\d+", str(score_block[0].get_text()))[0])
-                    curators_score = int(re.search("\d+", str(score_block[1].get_text()))[0])
-                    score = curators_score
-                except:
-                    simple_score_block = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[5].find('div').text
-                    match = re.search("\d+", str(simple_score_block))
-                    score = match[0] if match else 'Not found'
+            for user in users:
+                href = user.find('a', class_="btn btn-xs bg-purple", href=True)['href']
+                level = user.find_all('div')[7].find('b').text
+                user_name = user.find_all('div')[2].text
+                user_email = user.find_all('div')[3].text
 
-            HOMEWORKS_DATA.append(
-                {
-                    "user_email": user_email,
-                    "user_name": user_name,
-                    "level": level,
-                    "score": score,
-                    "href": href + "?status=checked",
-                }
-             )
+                async with session.get(href + "?status=checking", headers=headers) as user_page_response:
+                    user_page_response_text = await user_page_response.text()
+                    user_page_soup = BeautifulSoup(user_page_response_text, 'lxml')
+                    try:
+                        score_block = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[5].find_all('div')
+                        #test_score = int(re.search("\d+", str(score_block[0].get_text()))[0])
+                        curators_score = int(re.search("\d+", str(score_block[1].get_text()))[0])
+                        score = curators_score
+                    except:
+                        simple_score_block = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[5].find('div').text
+                        match = re.search("\d+", str(simple_score_block))
+                        score = match[0] if match else 'Not found'
 
-        print(f"[INFO] Обработал страницу #{page}")
-            #await asyncio.sleep(0.2) add sleep to the process
+                    try:
+                        curator_data = user_page_soup.find('div', class_="card-body").find('div',class_="row").find_all('div', class_="form-group col-md-3")[3].find_all('div')[1].find_all('b')
+                        print(curator_data)
+                        duty_curator = curator_data[0].text
+                        curator = curator_data[1].text
+                    except:
+                        duty_curator = "Not found"
+                        curator = "Not found"
+
+                HOMEWORKS_DATA.append(
+                    {
+                        "user_email": user_email,
+                        "user_name": user_name,
+                        "level": level,
+                        "score": score,
+                        "href": href + "?status=checked",
+                        "duty_curator": duty_curator,
+                        "curator" : curator
+                    }
+                 )
+
+            print(f"[INFO] Обработал страницу #{page}")
+            #await asyncio.sleep(0.1)
 
 
 async def gather_data():
@@ -86,6 +99,7 @@ async def gather_data():
         }
 
         course_id = config['main']['course_id']
+        group_id = config['main']['group_id']
     except:
         print("The configuration file could not be opened")
         exit(1)
@@ -107,7 +121,7 @@ async def gather_data():
         module_selection = None
         for x in range(0, 5):
             try:
-                page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}"
+                page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}&group_id={group_id}"
                 page_response = await session.get(page, headers=headers)
                 page_soup = BeautifulSoup(await page_response.text(), "lxml")
                 module_selection = page_soup.find("select", {"class": "form-control", "id": "module_id"}).find_all('option')
@@ -137,7 +151,7 @@ async def gather_data():
         lesson_select = None
         for x in range(0, 5):
             try:
-                page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}&module_id={module_id}"
+                page = f"https://api.100points.ru/student_homework/index?status=passed&email=&name=&course_id={course_id}&module_id={module_id}&group_id={group_id}"
                 page_response = await session.get(page, headers=headers)
                 page_soup = BeautifulSoup(await page_response.text(), 'lxml')
                 lesson_select = page_soup.find("select", {"class": "form-control", "id": "lesson_id"}).find_all('option')
@@ -180,13 +194,10 @@ async def gather_data():
             pages = 0
             print("\nНайдено меньше 15 записей")
 
-
-        limit = asyncio.Semaphore(LIMIT)
-        tasks = []
-
-        for page in range(1, 2 + pages):
-            task = asyncio.create_task(get_page_data(session, homework, page))
-            tasks.append(task)
+        
+        semaphore = asyncio.Semaphore(LIMIT)
+        
+        tasks = [asyncio.create_task(get_page_data(session, homework, page, semaphore)) for page in range(1, 2 + pages)]
 
         await asyncio.gather(*tasks)
 
@@ -195,8 +206,7 @@ def data_processing():
     data = []
 
     homeworks_data_sort = sorted(HOMEWORKS_DATA, key=lambda d: d['user_email'])
-
-    print(*homeworks_data_sort, sep = '\n')
+    #print(*homeworks_data_sort, sep = '\n')
 
     for homework in homeworks_data_sort:
         if not (data) or data[-1]["user_email"] != homework["user_email"]:
@@ -210,6 +220,8 @@ def data_processing():
                     "href_easy": '',
                     "href_middle": '',
                     "href_hard": '',
+                    "duty_curator" : homework["duty_curator"],
+                    "curator" : homework["curator"]
                 }
             )
 
@@ -245,7 +257,9 @@ def output_in_csv(data):
                 "Сложный уровень",
                 "Ссылка на базовый уровень",
                 "Ссылка на средний уровень",
-                "Ссылка на сложный уровень"
+                "Ссылка на сложный уровень",
+                "Дежурный куратор",
+                "Куратор"
             )
         )
     try:
@@ -277,6 +291,8 @@ def output_in_csv(data):
                             "href_easy": '',
                             "href_middle": '',
                             "href_hard": '',
+                            "duty_curator" : '',
+                            "curator" : ''
                         }))
             data = current_data
     except Exception:
@@ -297,7 +313,9 @@ def output_in_csv(data):
                         user["score_hard"],
                         user["href_easy"],
                         user["href_middle"],
-                        user["href_hard"]
+                        user["href_hard"],
+                        user["duty_curator"],
+                        user["curator"]
                     )
                 )
             except:
@@ -310,23 +328,30 @@ def output_in_csv(data):
                         user["score_hard"],
                         user["href_easy"],
                         user["href_middle"],
-                        user["href_hard"]
+                        user["href_hard"],
+                        user["duty_curator"],
+                        user["curator"]
                     )
                 )
     print("Saved file  " + f"{FNAME}--{cur_time}.csv")
 
 
-def main():
+def main():    
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     try:
         loop.run_until_complete(gather_data())
         data = data_processing()
+        
         output_in_csv(data)
     except KeyboardInterrupt:
         pass
 
 
 if __name__ == "__main__":
+    start = time.time()
     main()
+    end = time.time()
+    print("The time of execution of above program is :",
+      (end-start), "s")
